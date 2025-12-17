@@ -3,9 +3,9 @@ import pandas as pd
 from src.config import PATHS
 
 # Columns expected in CSV (adjust these if your CSV differs)
-DATE_COL = "date"
-HEADLINE_COL = "headline"
-CLOSE_COL = "close"
+DATE_COL = "Date"
+HEADLINE_COL = "Title"
+CLOSE_COL = "CP"
 
 def main():
     csv_path = PATHS.raw_csv

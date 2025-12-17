@@ -2,9 +2,9 @@ import numpy as np
 import pandas as pd
 from src.config import PATHS
 
-DATE_COL = "date"
-HEADLINE_COL = "headline"
-CLOSE_COL = "close"
+DATE_COL = "Date"
+HEADLINE_COL = "Title"
+CLOSE_COL = "CP"
 
 def build(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
