@@ -1,2 +1,2 @@
 # news-driven-market-reaction
-    End-to-end deep learning project modeling short-term market reactions to financial news. Uses transformer-based NLP, time-based event labeling, REST inference with FastAPI, and containerized deployment on Kubernetes. Focus on reproducibility, MLOps, and financial context.
+End-to-end engineering project modeling short-term market reactions to financial news. Implements a transformer-based NLP pipeline with time-based event labeling, regression on next-day returns, REST inference via FastAPI, and Docker/Helm deployment on Kubernetes. Focus on clean data pipelines, reproducibility, and MLOps practices.
