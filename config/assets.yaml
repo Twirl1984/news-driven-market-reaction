@@ -1,0 +1,72 @@
+# Asset configuration for trading strategy
+# This file defines ETFs and other assets to track
+
+etfs:
+  # US Market Index ETFs
+  - ticker: SPY
+    name: SPDR S&P 500 ETF Trust
+    asset_class: us_equity_large_cap
+    enabled: true
+  
+  - ticker: QQQ
+    name: Invesco QQQ Trust
+    asset_class: us_equity_tech
+    enabled: true
+  
+  - ticker: DIA
+    name: SPDR Dow Jones Industrial Average ETF
+    asset_class: us_equity_large_cap
+    enabled: true
+  
+  - ticker: IWM
+    name: iShares Russell 2000 ETF
+    asset_class: us_equity_small_cap
+    enabled: true
+  
+  # Sector ETFs
+  - ticker: XLF
+    name: Financial Select Sector SPDR Fund
+    asset_class: us_equity_financials
+    enabled: true
+  
+  - ticker: XLE
+    name: Energy Select Sector SPDR Fund
+    asset_class: us_equity_energy
+    enabled: true
+  
+  - ticker: XLK
+    name: Technology Select Sector SPDR Fund
+    asset_class: us_equity_technology
+    enabled: true
+  
+  # International/Country ETFs
+  - ticker: EFA
+    name: iShares MSCI EAFE ETF
+    asset_class: international_developed
+    enabled: true
+  
+  - ticker: EEM
+    name: iShares MSCI Emerging Markets ETF
+    asset_class: international_emerging
+    enabled: true
+  
+  - ticker: FXI
+    name: iShares China Large-Cap ETF
+    asset_class: country_china
+    enabled: true
+
+# Trading configuration per asset class
+trading_rules:
+  default:
+    min_holding_period_days: 1
+    max_position_size_pct: 100.0
+    transaction_cost_bps: 10
+    slippage_bps: 5
+  
+  us_equity_large_cap:
+    transaction_cost_bps: 5
+    slippage_bps: 3
+  
+  international_emerging:
+    transaction_cost_bps: 15
+    slippage_bps: 10
