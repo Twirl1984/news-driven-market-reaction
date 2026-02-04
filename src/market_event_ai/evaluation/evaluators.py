@@ -1,74 +1,135 @@
-"""
-Model evaluation module for Market Event AI.
-
-This module handles evaluating trained models and computing performance metrics.
-"""
-
+"""Model evaluation modules."""
 import logging
 from pathlib import Path
-from typing import Optional, Dict, Any, Union
+import json
+import numpy as np
+import pandas as pd
+from sklearn.metrics import (
+    accuracy_score, precision_score, recall_score, f1_score,
+    classification_report, confusion_matrix
+)
 import joblib
+
+from market_event_ai.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
 
 class ModelEvaluator:
-    """
-    Model evaluator for computing performance metrics.
+    """Evaluate trained models."""
     
-    This class works with scikit-learn compatible models (with predict/predict_proba methods)
-    including XGBoost, LightGBM, Random Forest, and Neural Networks.
+    def __init__(self, model_path: Path):
+        """
+        Initialize evaluator.
+        
+        Args:
+            model_path: Path to trained model directory
+        """
+        self.model_path = model_path
+        self.model = joblib.load(model_path / "model.joblib")
+        
+        with open(model_path / "metadata.json", 'r') as f:
+            self.metadata = json.load(f)
+    
+    def evaluate(self, data: pd.DataFrame) -> dict:
+        """
+        Evaluate model on data.
+        
+        Args:
+            data: Labeled data with features
+        
+        Returns:
+            Dict with evaluation metrics
+        """
+        logger.info(f"Evaluating model on {len(data)} samples...")
+        
+        # Prepare features
+        feature_names = self.metadata['feature_names']
+        X = data[feature_names].fillna(0).replace([np.inf, -np.inf], 0)
+        y_true = data['label'].values
+        
+        # Predict
+        y_pred = self.model.predict(X)
+        y_proba = None
+        if hasattr(self.model, 'predict_proba'):
+            y_proba = self.model.predict_proba(X)
+        
+        # Calculate metrics
+        metrics = {
+            'accuracy': accuracy_score(y_true, y_pred),
+            'precision': precision_score(y_true, y_pred, average='weighted', zero_division=0),
+            'recall': recall_score(y_true, y_pred, average='weighted', zero_division=0),
+            'f1': f1_score(y_true, y_pred, average='weighted', zero_division=0)
+        }
+        
+        # Classification report
+        report = classification_report(y_true, y_pred, output_dict=True, zero_division=0)
+        
+        # Confusion matrix
+        cm = confusion_matrix(y_true, y_pred)
+        
+        # Feature importance (if available)
+        feature_importance = None
+        if hasattr(self.model, 'feature_importances_'):
+            importance = self.model.feature_importances_
+            feature_importance = dict(zip(feature_names, importance.tolist()))
+            # Sort by importance
+            feature_importance = dict(
+                sorted(feature_importance.items(), key=lambda x: x[1], reverse=True)
+            )
+        
+        results = {
+            'metrics': metrics,
+            'classification_report': report,
+            'confusion_matrix': cm.tolist(),
+            'feature_importance': feature_importance,
+            'num_samples': len(data),
+            'num_features': len(feature_names)
+        }
+        
+        logger.info(f"Evaluation metrics: {metrics}")
+        
+        return results
+
+
+def evaluate_model(model_type: str = None):
     """
-
-    def __init__(self, model: Any):
-        """
-        Initialize evaluator with a trained model.
-
-        Args:
-            model: Trained model object (scikit-learn compatible with predict method)
-        """
-        self.model = model
-
-    @classmethod
-    def from_path(cls, model_path: Path) -> "ModelEvaluator":
-        """
-        Load model from path and create evaluator.
-
-        Args:
-            model_path: Path to saved model
-
-        Returns:
-            ModelEvaluator instance
-
-        Raises:
-            FileNotFoundError: If model file does not exist
-        """
-        if not model_path.exists():
-            raise FileNotFoundError(f"Model not found at {model_path}")
-
-        logger.info(f"Loading model from {model_path}")
-        model = joblib.load(model_path)
-        return cls(model)
-
-    def evaluate(
-        self,
-        test_data_path: Optional[Path] = None,
-        metrics: str = "all",
-        output_dir: Optional[Path] = None,
-    ) -> Dict[str, Any]:
-        """
-        Evaluate model on test data.
-
-        Args:
-            test_data_path: Path to test data (optional)
-            metrics: Type of metrics to compute
-            output_dir: Directory to save evaluation results
-
-        Returns:
-            Dictionary with evaluation metrics
-
-        Raises:
-            NotImplementedError: This function is not yet implemented
-        """
-        logger.info(f"evaluate called with metrics={metrics}")
-        raise NotImplementedError("Model evaluation not yet implemented")
+    Main evaluation pipeline.
+    
+    Args:
+        model_type: Type of model to evaluate
+    """
+    logger.info("Starting model evaluation...")
+    
+    # Use model type from settings if not provided
+    if model_type is None:
+        model_type = settings.model.model_type
+    
+    # Load model
+    model_dir = settings.paths.models / model_type
+    if not model_dir.exists():
+        raise FileNotFoundError(f"Model not found: {model_dir}")
+    
+    # Load test data
+    data_file = settings.paths.data_labels / "labeled_data_classification.parquet"
+    if not data_file.exists():
+        raise FileNotFoundError(f"Labeled data not found: {data_file}")
+    
+    data = pd.read_parquet(data_file)
+    
+    # Evaluate
+    evaluator = ModelEvaluator(model_dir)
+    results = evaluator.evaluate(data)
+    
+    # Save results
+    output_file = model_dir / "evaluation.json"
+    
+    # Convert numpy arrays to lists for JSON serialization
+    results_serializable = results.copy()
+    
+    with open(output_file, 'w') as f:
+        json.dump(results_serializable, f, indent=2)
+    
+    logger.info(f"Evaluation results saved to {output_file}")
+    
+    return results

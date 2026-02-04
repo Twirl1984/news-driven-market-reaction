@@ -1,7 +1,21 @@
 # data artifacts
 data/raw/*
 data/processed/*
+data/features/*
+data/labels/*
+data/models/*
+data/backtests/*
+data/reports/*
 db/*.db
+
+# Keep directory structure but ignore contents
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/features/.gitkeep
+!data/labels/.gitkeep
+!data/models/.gitkeep
+!data/backtests/.gitkeep
+!data/reports/.gitkeep
 
 # models
 models/*
@@ -9,7 +23,40 @@ models/*
 # python cache
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
 
 # environments
 .venv/
+venv/
+ENV/
+env/
 .env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# OS
+.DS_Store
+Thumbs.db

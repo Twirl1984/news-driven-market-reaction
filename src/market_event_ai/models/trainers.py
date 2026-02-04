@@ -1,166 +1,273 @@
-"""
-Model training module for Market Event AI.
-
-This module handles training various machine learning models including XGBoost,
-LightGBM, Random Forest, Neural Networks, and Transformers.
-"""
-
+"""Model training modules."""
 import logging
 from pathlib import Path
-from typing import Optional, Any
+from typing import Tuple, Dict, Any
+import json
+import numpy as np
+import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import TimeSeriesSplit
+import xgboost as xgb
+import lightgbm as lgb
 import joblib
+
+from market_event_ai.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
 
-class BaseTrainer:
-    """Base class for model trainers."""
-
-    def train(
-        self,
-        data_dir: Path,
-        target: str,
-        cv_folds: int = 5,
-        hyperopt: bool = False,
-        n_trials: Optional[int] = None,
-        random_seed: int = 42,
-    ) -> Any:
+class WalkForwardSplitter:
+    """Walk-forward cross-validation splitter."""
+    
+    def __init__(self, n_splits: int = 5, embargo_days: int = 5):
         """
-        Train a model.
-
+        Initialize splitter.
+        
         Args:
-            data_dir: Directory with training data
-            target: Target variable name
-            cv_folds: Number of cross-validation folds
-            hyperopt: Whether to perform hyperparameter optimization
-            n_trials: Number of optimization trials
-            random_seed: Random seed for reproducibility
-
+            n_splits: Number of splits
+            embargo_days: Days to embargo between train and test to prevent leakage
+        """
+        self.n_splits = n_splits
+        self.embargo_days = embargo_days
+    
+    def split(self, df: pd.DataFrame) -> list:
+        """
+        Generate walk-forward splits.
+        
         Returns:
-            Trained model object
-
-        Raises:
-            NotImplementedError: Must be implemented by subclass
+            List of (train_idx, test_idx) tuples
         """
-        raise NotImplementedError("train method must be implemented by subclass")
+        logger.info(f"Creating {self.n_splits} walk-forward splits with {self.embargo_days} day embargo")
+        
+        # Sort by date
+        df = df.sort_values('date').reset_index(drop=True)
+        dates = df['date'].unique()
+        n_dates = len(dates)
+        
+        # Calculate split points
+        test_size = n_dates // (self.n_splits + 1)
+        
+        splits = []
+        for i in range(self.n_splits):
+            # Train: from start to split point
+            train_end_idx = (i + 1) * test_size
+            
+            # Apply embargo
+            embargo_end_idx = train_end_idx + self.embargo_days
+            
+            # Test: after embargo to next split
+            test_start_idx = embargo_end_idx
+            test_end_idx = min(train_end_idx + test_size, n_dates)
+            
+            if test_start_idx >= test_end_idx:
+                continue
+            
+            # Convert date indices to row indices
+            train_dates = dates[:train_end_idx]
+            test_dates = dates[test_start_idx:test_end_idx]
+            
+            train_idx = df[df['date'].isin(train_dates)].index.tolist()
+            test_idx = df[df['date'].isin(test_dates)].index.tolist()
+            
+            splits.append((train_idx, test_idx))
+            
+            logger.info(f"Split {i+1}: Train size={len(train_idx)}, Test size={len(test_idx)}")
+        
+        return splits
 
-    def save_model(self, model: Any, path: Path) -> None:
+
+class ModelTrainer:
+    """Train classification models for trading signals."""
+    
+    def __init__(self, model_type: str, random_seed: int = 42):
         """
-        Save trained model to disk.
-
+        Initialize trainer.
+        
         Args:
-            model: Trained model object
-            path: Path to save the model
+            model_type: 'logistic', 'random_forest', 'xgboost', 'lightgbm'
+            random_seed: Random seed for reproducibility
         """
-        path.parent.mkdir(parents=True, exist_ok=True)
-        joblib.dump(model, path)
-        logger.info(f"Model saved to {path}")
+        self.model_type = model_type
+        self.random_seed = random_seed
+        np.random.seed(random_seed)
+    
+    def create_model(self):
+        """Create model instance."""
+        if self.model_type == 'logistic':
+            return LogisticRegression(
+                random_state=self.random_seed,
+                max_iter=1000,
+                class_weight='balanced'
+            )
+        elif self.model_type == 'random_forest':
+            return RandomForestClassifier(
+                n_estimators=100,
+                max_depth=10,
+                random_state=self.random_seed,
+                class_weight='balanced',
+                n_jobs=-1
+            )
+        elif self.model_type == 'xgboost':
+            return xgb.XGBClassifier(
+                n_estimators=100,
+                max_depth=5,
+                learning_rate=0.1,
+                random_state=self.random_seed,
+                eval_metric='logloss'
+            )
+        elif self.model_type == 'lightgbm':
+            return lgb.LGBMClassifier(
+                n_estimators=100,
+                max_depth=5,
+                learning_rate=0.1,
+                random_state=self.random_seed,
+                class_weight='balanced',
+                verbose=-1
+            )
+        else:
+            raise ValueError(f"Unknown model type: {self.model_type}")
+    
+    def prepare_features(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, np.ndarray]:
+        """
+        Prepare feature matrix and labels.
+        
+        Returns:
+            X: Feature matrix
+            y: Labels
+        """
+        # Exclude non-feature columns
+        exclude_cols = [
+            'date', 'ticker', 'timestamp', 'asset_id', 'asset_class',
+            'label', 'signal', 'future_return', 'target_return',
+            'text_raw', 'text_clean', 'text_combined', 'metadata'
+        ]
+        
+        feature_cols = [col for col in df.columns if col not in exclude_cols]
+        
+        X = df[feature_cols].copy()
+        y = df['label'].values
+        
+        # Fill any remaining NaNs
+        X = X.fillna(0)
+        
+        # Replace inf values
+        X = X.replace([np.inf, -np.inf], 0)
+        
+        logger.info(f"Feature matrix shape: {X.shape}")
+        logger.info(f"Features: {feature_cols[:10]}... (showing first 10)")
+        
+        return X, y
+    
+    def train(self, df: pd.DataFrame) -> Dict[str, Any]:
+        """
+        Train model with walk-forward validation.
+        
+        Returns:
+            Dict with model, metrics, and metadata
+        """
+        logger.info(f"Training {self.model_type} model...")
+        
+        # Prepare data
+        X, y = self.prepare_features(df)
+        
+        # Walk-forward split
+        splitter = WalkForwardSplitter(
+            n_splits=5,
+            embargo_days=settings.trading.embargo_days
+        )
+        splits = splitter.split(df)
+        
+        # Train on all data (for final model)
+        model = self.create_model()
+        model.fit(X, y)
+        
+        # Calculate metrics from cross-validation
+        cv_metrics = []
+        for train_idx, test_idx in splits:
+            X_train, y_train = X.iloc[train_idx], y[train_idx]
+            X_test, y_test = X.iloc[test_idx], y[test_idx]
+            
+            fold_model = self.create_model()
+            fold_model.fit(X_train, y_train)
+            
+            # Predict
+            y_pred = fold_model.predict(X_test)
+            
+            # Calculate metrics
+            from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+            
+            fold_metrics = {
+                'accuracy': accuracy_score(y_test, y_pred),
+                'precision': precision_score(y_test, y_pred, average='weighted', zero_division=0),
+                'recall': recall_score(y_test, y_pred, average='weighted', zero_division=0),
+                'f1': f1_score(y_test, y_pred, average='weighted', zero_division=0)
+            }
+            cv_metrics.append(fold_metrics)
+        
+        # Average metrics
+        avg_metrics = {
+            metric: np.mean([m[metric] for m in cv_metrics])
+            for metric in cv_metrics[0].keys()
+        }
+        
+        logger.info(f"Cross-validation metrics: {avg_metrics}")
+        
+        return {
+            'model': model,
+            'metrics': avg_metrics,
+            'feature_names': X.columns.tolist(),
+            'model_type': self.model_type
+        }
 
 
-class XGBoostTrainer(BaseTrainer):
-    """Trainer for XGBoost models."""
-
-    def train(
-        self,
-        data_dir: Path,
-        target: str,
-        cv_folds: int = 5,
-        hyperopt: bool = False,
-        n_trials: Optional[int] = None,
-        random_seed: int = 42,
-    ) -> Any:
-        logger.info(f"XGBoost training called for target={target}")
-        raise NotImplementedError("XGBoost training not yet implemented")
-
-
-class LightGBMTrainer(BaseTrainer):
-    """Trainer for LightGBM models."""
-
-    def train(
-        self,
-        data_dir: Path,
-        target: str,
-        cv_folds: int = 5,
-        hyperopt: bool = False,
-        n_trials: Optional[int] = None,
-        random_seed: int = 42,
-    ) -> Any:
-        logger.info(f"LightGBM training called for target={target}")
-        raise NotImplementedError("LightGBM training not yet implemented")
-
-
-class RandomForestTrainer(BaseTrainer):
-    """Trainer for Random Forest models."""
-
-    def train(
-        self,
-        data_dir: Path,
-        target: str,
-        cv_folds: int = 5,
-        hyperopt: bool = False,
-        n_trials: Optional[int] = None,
-        random_seed: int = 42,
-    ) -> Any:
-        logger.info(f"Random Forest training called for target={target}")
-        raise NotImplementedError("Random Forest training not yet implemented")
-
-
-class NeuralNetTrainer(BaseTrainer):
-    """Trainer for Neural Network models."""
-
-    def train(
-        self,
-        data_dir: Path,
-        target: str,
-        cv_folds: int = 5,
-        hyperopt: bool = False,
-        n_trials: Optional[int] = None,
-        random_seed: int = 42,
-    ) -> Any:
-        logger.info(f"Neural Network training called for target={target}")
-        raise NotImplementedError("Neural Network training not yet implemented")
-
-
-class TransformerTrainer(BaseTrainer):
-    """Trainer for Transformer models."""
-
-    def train(
-        self,
-        data_dir: Path,
-        target: str,
-        cv_folds: int = 5,
-        hyperopt: bool = False,
-        n_trials: Optional[int] = None,
-        random_seed: int = 42,
-    ) -> Any:
-        logger.info(f"Transformer training called for target={target}")
-        raise NotImplementedError("Transformer training not yet implemented")
-
-
-def get_trainer(model_type: str) -> BaseTrainer:
+def train_model(model_type: str = None):
     """
-    Get trainer instance for specified model type.
-
+    Main training pipeline.
+    
     Args:
         model_type: Type of model to train
-
-    Returns:
-        Trainer instance
-
-    Raises:
-        ValueError: If model type is not recognized
     """
-    trainers = {
-        "xgboost": XGBoostTrainer,
-        "lightgbm": LightGBMTrainer,
-        "random_forest": RandomForestTrainer,
-        "neural_net": NeuralNetTrainer,
-        "transformer": TransformerTrainer,
+    logger.info("Starting model training...")
+    
+    # Use model type from settings if not provided
+    if model_type is None:
+        model_type = settings.model.model_type
+    
+    # Load labeled data
+    data_file = settings.paths.data_labels / "labeled_data_classification.parquet"
+    if not data_file.exists():
+        raise FileNotFoundError(f"Labeled data not found: {data_file}")
+    
+    df = pd.read_parquet(data_file)
+    
+    logger.info(f"Loaded {len(df)} labeled samples")
+    logger.info(f"Training {model_type} model...")
+    
+    # Train model
+    trainer = ModelTrainer(model_type=model_type, random_seed=settings.model.random_seed)
+    results = trainer.train(df)
+    
+    # Save model
+    model_dir = settings.paths.models / model_type
+    model_dir.mkdir(parents=True, exist_ok=True)
+    
+    model_file = model_dir / "model.joblib"
+    joblib.dump(results['model'], model_file)
+    
+    # Save metadata
+    metadata = {
+        'model_type': results['model_type'],
+        'metrics': results['metrics'],
+        'feature_names': results['feature_names'],
+        'random_seed': settings.model.random_seed
     }
-
-    if model_type not in trainers:
-        raise ValueError(
-            f"Unknown model type: {model_type}. Available: {list(trainers.keys())}"
-        )
-
-    return trainers[model_type]()
+    
+    metadata_file = model_dir / "metadata.json"
+    with open(metadata_file, 'w') as f:
+        json.dump(metadata, f, indent=2)
+    
+    logger.info(f"Model saved to {model_dir}")
+    logger.info(f"Metrics: {results['metrics']}")
+    
+    return model_dir
