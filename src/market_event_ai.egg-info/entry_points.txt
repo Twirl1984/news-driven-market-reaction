@@ -1,0 +1,2 @@
+[console_scripts]
+market-event-ai = market_event_ai.cli:main
