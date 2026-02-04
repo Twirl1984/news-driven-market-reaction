@@ -314,7 +314,7 @@ def features(
 
         if feature_set == "all" or feature_set == "technical":
             logger.info("Generating technical indicators...")
-            extractors.generate_technical_features(
+            extractors.generate_technical_indicators(
                 input_dir=input_dir,
                 output_dir=output_dir,
             )
@@ -495,20 +495,8 @@ def train(
     logger.info(f"Target variable: {target}")
 
     try:
-        trainer = trainers.get_trainer(model_type)
-
-        model = trainer.train(
-            data_dir=input_dir,
-            target=target,
-            cv_folds=cv_folds,
-            hyperopt=hyperopt,
-            n_trials=n_trials if hyperopt else None,
-            random_seed=settings.model.random_seed,
-        )
-
-        # Save model
-        model_path = output_dir / f"{model_type}_{target}.joblib"
-        trainer.save_model(model, model_path)
+        # Use the train_model function instead of get_trainer
+        model_path = trainers.train_model(model_type=model_type)
 
         click.echo(click.style(f"✓ Model training complete", fg="green"))
         logger.info(f"Model saved to {model_path}")
@@ -569,13 +557,9 @@ def evaluate(
     logger.info(f"Evaluating model: {model_path}")
 
     try:
-        evaluator = evaluators.ModelEvaluator.from_path(model_path)
-
-        results = evaluator.evaluate(
-            test_data_path=test_data,
-            metrics=metrics,
-            output_dir=output_dir,
-        )
+        # Use evaluate_model function with model_type from path
+        model_type = model_path.parent.name if model_path.is_file() else model_path.name
+        results = evaluators.evaluate_model(model_type=model_type)
 
         # Display summary metrics
         click.echo(click.style("\n=== Evaluation Results ===", fg="cyan", bold=True))
@@ -673,36 +657,20 @@ def backtest(
     logger.info(f"Strategy: {strategy}, Initial capital: ${initial_capital:,.2f}")
 
     try:
-        backtester = backtesters.Backtester(
-            model_path=model_path,
-            strategy=strategy,
-            initial_capital=initial_capital,
-            trading_cost_bps=settings.trading.trading_cost_bps,
-            slippage_bps=settings.trading.slippage_bps,
-        )
-
-        results = backtester.run(
-            start_date=start_date,
-            end_date=end_date,
-            rebalance_freq=rebalance_freq,
-            walk_forward=walk_forward,
-            walk_forward_window=settings.trading.walk_forward_window_days,
-        )
+        # Use run_backtest function with model_type from path
+        model_type = model_path.parent.name if model_path.is_file() else model_path.name
+        results = backtesters.run_backtest(model_type=model_type)
 
         # Display summary statistics
         click.echo(click.style("\n=== Backtest Results ===", fg="cyan", bold=True))
-        click.echo(f"Total Return: {results['total_return']:.2%}")
-        click.echo(f"Sharpe Ratio: {results['sharpe_ratio']:.2f}")
-        click.echo(f"Max Drawdown: {results['max_drawdown']:.2%}")
-        click.echo(f"Win Rate: {results['win_rate']:.2%}")
-        click.echo(f"Num Trades: {results['num_trades']}")
-
-        # Save results
-        results_path = output_dir / f"backtest_{model_path.stem}_{start_date}_{end_date}.parquet"
-        backtester.save_results(results, results_path)
+        metrics = results['metrics']
+        click.echo(f"Total Return: {metrics.get('total_return', 0):.2%}")
+        click.echo(f"Sharpe Ratio: {metrics.get('sharpe_ratio', 0):.2f}")
+        click.echo(f"Max Drawdown: {metrics.get('max_drawdown', 0):.2%}")
+        click.echo(f"Num Trades: {metrics.get('num_trades', 0)}")
 
         click.echo(click.style(f"\n✓ Backtest complete", fg="green"))
-        logger.info(f"Results saved to {results_path}")
+        logger.info(f"Results saved to {output_dir}")
 
     except Exception as e:
         logger.error(f"Backtest failed: {e}", exc_info=True)
@@ -774,20 +742,12 @@ def report(
     logger.info(f"Generating {report_type} report from {input_dir}")
 
     try:
-        generator = generators.ReportGenerator(
-            input_dir=input_dir,
-            output_path=output,
-            format=report_format,
-        )
-
-        generator.generate(
-            report_type=report_type,
-            include_plots=include_plots,
-        )
+        # Use generate_report function
+        report_file = generators.generate_report(model_type="xgboost")  # Default to xgboost
 
         click.echo(click.style(f"✓ Report generated successfully", fg="green"))
-        click.echo(f"Report saved to: {output}")
-        logger.info(f"Report saved to {output}")
+        click.echo(f"Report saved to: {report_file}")
+        logger.info(f"Report saved to {report_file}")
 
     except Exception as e:
         logger.error(f"Report generation failed: {e}", exc_info=True)

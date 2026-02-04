@@ -48,7 +48,7 @@ class TextCleaner:
                 'polarity': blob.sentiment.polarity,
                 'subjectivity': blob.sentiment.subjectivity
             }
-        except:
+        except Exception:
             return {'polarity': 0.0, 'subjectivity': 0.0}
 
 

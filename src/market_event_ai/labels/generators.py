@@ -1,7 +1,7 @@
 """Label generation for supervised learning."""
 import logging
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Dict
 import pandas as pd
 import numpy as np
 
