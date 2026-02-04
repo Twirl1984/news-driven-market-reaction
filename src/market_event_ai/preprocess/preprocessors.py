@@ -188,3 +188,37 @@ def preprocess_all():
         financial_processor.preprocess(financial_file)
     
     logger.info("All preprocessing completed")
+
+
+# Wrapper functions for CLI
+def preprocess_tweets(input_dir: Path, output_dir: Path, clean_text: bool = True, remove_duplicates: bool = True):
+    """Preprocess tweets (CLI wrapper)."""
+    processor = EventPreprocessor(output_dir)
+    input_file = input_dir / "trump_tweets.json"
+    if input_file.exists():
+        return processor.preprocess_tweets(input_file)
+    else:
+        logger.warning(f"Tweets file not found: {input_file}")
+        return None
+
+
+def preprocess_gdelt(input_dir: Path, output_dir: Path, remove_duplicates: bool = True):
+    """Preprocess GDELT events (CLI wrapper)."""
+    processor = EventPreprocessor(output_dir)
+    input_file = input_dir / "gdelt_events.csv"
+    if input_file.exists():
+        return processor.preprocess_gdelt(input_file)
+    else:
+        logger.warning(f"GDELT file not found: {input_file}")
+        return None
+
+
+def preprocess_financial_data(input_dir: Path, output_dir: Path):
+    """Preprocess financial data (CLI wrapper)."""
+    processor = FinancialDataPreprocessor(output_dir)
+    input_file = input_dir / "financial_data.parquet"
+    if input_file.exists():
+        return processor.preprocess(input_file)
+    else:
+        logger.warning(f"Financial data file not found: {input_file}")
+        return None

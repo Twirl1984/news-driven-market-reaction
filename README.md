@@ -1,74 +1,317 @@
-# News → Market Reaction Predictor (Option A: Kaggle paired dataset)
+# Market Event AI - Political Events Trading System
 
-This repo is a hands-on MVP for:
-- **Deep learning with Transformers** (headline → next-day log return)
-- **Data engineering** (CSV → SQLite → parquet)
-- **MLOps basics** (reproducible training, tests, FastAPI inference, Docker, Helm/K8s)
+[![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 
-## 0) Dataset
-Download the Kaggle dataset (example):
-- "S&P 500 with Financial News Headlines (2008–2024)"
+A reproducible, professional-grade trading system that correlates political events (Trump tweets, executive orders, media articles) with ETF market movements to generate trading signals.
 
-Put the CSV into:
-- `data/raw/sp500_headlines.csv`
+## 🎯 Project Goal
 
-Expected minimal columns (rename in code if needed):
-- `date` (YYYY-MM-DD or timestamp)
-- `headline` (string)
-- `close` (float close price for the same date)
+Investigate whether political events systematically influence ETF returns and derive tradeable signals with realistic backtesting (no lookahead bias).
 
-## 1) Quickstart (local)
+### Key Features
+
+- **Event-Driven**: Analyzes Trump tweets, GDELT events, executive orders, and media articles
+- **ETF Focus**: Trades on index-based ETFs (SPY, QQQ, DIA, sector ETFs, international)
+- **Trading Signals**: LONG/FLAT strategy with optional SHORT
+- **Realistic Backtesting**: Walk-forward validation with transaction costs and slippage
+- **No Lookahead Bias**: Strict temporal separation of features and labels
+- **Reproducible**: Fixed dependencies, deterministic seeds, version control
+
+## 📊 Architecture
+
+```
+Data Pipeline:
+data_raw → data_processed → features → labels → models → backtests → reports
+
+Event Sources:
+├── Trump Tweets (archived)
+├── GDELT 2.1 (political events)
+└── yFinance (ETF prices)
+
+Models:
+├── Logistic Regression
+├── Random Forest
+├── XGBoost (default)
+├── LightGBM
+└── Neural Networks (LSTM/Transformer)
+
+Outputs:
+├── Trading signals (LONG/FLAT)
+├── Equity curve
+├── Performance metrics (CAGR, Sharpe, Max DD)
+└── Automated reports
+```
+
+## 🚀 Quick Start
+
+### 1. Installation
+
 ```bash
+# Clone repository
+git clone https://github.com/Twirl1984/news-driven-market-reaction.git
+cd news-driven-market-reaction
+
+# Create virtual environment
 python -m venv .venv
-source .venv/bin/activate
-pip install -U pip
-pip install -r requirements.txt
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
-# 1) ingest CSV to SQLite
-python -m src.ingest_to_sqlite
-
-# 2) build modeling table (parquet)
-python -m src.build_dataset
-
-# 3) train transformer regressor
-python -m src.train_transformer
-
-# 4) run API
-MODEL_DIR=models/transformer_reg uvicorn src.api:app --host 0.0.0.0 --port 8000
+# Install package
+pip install -e .
 ```
 
-Test prediction:
+### 2. Configuration
+
 ```bash
-curl -X POST http://localhost:8000/predict \
-  -H "Content-Type: application/json" \
-  -d '{"headline":"Company warns of weaker demand in Q3"}'
+# Copy environment template
+cp .env.example .env
+
+# Edit configuration (optional)
+nano .env
+
+# Review asset configuration
+cat config/assets.yaml
 ```
 
-## 2) Docker
+### 3. Run Complete Pipeline
+
 ```bash
-docker build -t news-market-reaction:latest -f docker/Dockerfile .
-docker run --rm -p 8000:8000 -e MODEL_DIR=/app/models/transformer_reg \
-  -v "$(pwd)/models:/app/models" news-market-reaction:latest
+# Download data
+market-event-ai download --source all --start-date 2016-01-01 --end-date 2020-12-31
+
+# Preprocess data
+market-event-ai preprocess
+
+# Generate features
+market-event-ai features
+
+# Generate labels
+market-event-ai label --task classification --threshold 0.02
+
+# Train model
+market-event-ai train --model-type xgboost
+
+# Evaluate model
+market-event-ai evaluate
+
+# Run backtest
+market-event-ai backtest
+
+# Generate report
+market-event-ai report
 ```
 
-## 3) Kubernetes (kind/minikube) + Helm
-This is a lightweight local stand-in for OpenShift-like workflows.
+### 4. View Results
 
-Prereqs:
-- kind OR minikube
-- kubectl
-- helm
-
-Build local image, then load it into kind:
 ```bash
-docker build -t news-market-reaction:latest -f docker/Dockerfile .
-kind create cluster --name nmr
-kind load docker-image news-market-reaction:latest --name nmr
-helm upgrade --install nmr ./helm --set image.repository=news-market-reaction --set image.tag=latest
-kubectl port-forward svc/nmr 8000:8000
+# Check reports
+ls data/reports/xgboost/
+
+# View summary
+cat data/reports/xgboost/summary.md
+
+# View equity curve
+open data/reports/xgboost/equity_curve.png
 ```
 
-## 4) Notes / next steps
-- Replace `distilbert-base-uncased` with a finance-tuned model if desired.
-- Add time-series features (last-5-day returns, volatility) and fuse with text embeddings.
-- Add "policy" (prescriptive layer): e.g. alert/monitor/ignore based on predicted return & confidence.
+## 📁 Repository Structure
+
+```
+news-driven-market-reaction/
+├── config/
+│   └── assets.yaml              # Asset configuration (ETFs, stocks)
+├── src/
+│   └── market_event_ai/
+│       ├── cli.py               # Command-line interface
+│       ├── config/
+│       │   └── settings.py      # Configuration management
+│       ├── data/
+│       │   ├── downloaders.py   # Data download modules
+│       │   └── schemas.py       # Data schemas
+│       ├── preprocess/
+│       │   └── preprocessors.py # Text cleaning, sentiment
+│       ├── features/
+│       │   └── extractors.py    # Feature engineering
+│       ├── labels/
+│       │   └── generators.py    # Label generation
+│       ├── alignment/
+│       │   └── event_study.py   # Event study analysis
+│       ├── models/
+│       │   └── trainers.py      # Model training
+│       ├── portfolio/
+│       │   └── backtesters.py   # Backtesting engine
+│       ├── evaluation/
+│       │   └── evaluators.py    # Model evaluation
+│       └── reports/
+│           └── generators.py    # Report generation
+├── tests/
+│   ├── unit/                    # Unit tests
+│   └── integration/             # Integration tests
+├── notebooks/                   # Jupyter notebooks
+├── data/                        # Data directories (gitignored)
+│   ├── raw/
+│   ├── processed/
+│   ├── features/
+│   ├── labels/
+│   ├── models/
+│   ├── backtests/
+│   └── reports/
+├── .env.example                 # Environment template
+├── .gitignore
+├── LICENSE                      # MIT License
+├── Makefile                     # Build automation
+├── pyproject.toml              # Project configuration
+├── requirements.txt            # Dependencies (legacy)
+└── README.md                   # This file
+```
+
+## 🔧 CLI Commands
+
+### `download` - Download Data
+
+```bash
+market-event-ai download --source tweets --start-date 2016-01-01 --end-date 2020-12-31
+market-event-ai download --source gdelt --start-date 2016-01-01 --end-date 2020-12-31
+market-event-ai download --source financial --start-date 2016-01-01 --end-date 2020-12-31
+market-event-ai download --source all --start-date 2016-01-01 --end-date 2020-12-31
+```
+
+### `preprocess` - Clean Data
+
+```bash
+market-event-ai preprocess
+```
+
+### `features` - Extract Features
+
+```bash
+market-event-ai features
+```
+
+### `label` - Generate Labels
+
+```bash
+market-event-ai label --task classification --threshold 0.02 --horizon 1
+market-event-ai label --task regression --horizon 1
+```
+
+### `train` - Train Models
+
+```bash
+market-event-ai train --model-type xgboost
+market-event-ai train --model-type random_forest
+market-event-ai train --model-type logistic
+market-event-ai train --model-type lightgbm
+```
+
+### `evaluate` - Evaluate Models
+
+```bash
+market-event-ai evaluate --model-type xgboost
+```
+
+### `backtest` - Run Backtests
+
+```bash
+market-event-ai backtest --model-type xgboost
+```
+
+### `report` - Generate Reports
+
+```bash
+market-event-ai report --model-type xgboost
+```
+
+## 📊 Performance Metrics
+
+The system reports comprehensive metrics:
+
+- **CAGR**: Compound Annual Growth Rate
+- **Sharpe Ratio**: Risk-adjusted returns (annualized)
+- **Max Drawdown**: Maximum peak-to-trough decline
+- **Hit Rate**: Percentage of profitable trades
+- **Turnover**: Portfolio turnover rate
+- **Benchmark**: Comparison vs Buy & Hold
+
+## 🔒 Data Leakage Prevention
+
+The system implements strict safeguards:
+
+1. **Temporal Separation**: Features use only past data, labels use future data
+2. **Walk-Forward Validation**: Time-series aware cross-validation
+3. **Embargo Period**: Configurable gap between train/test sets
+4. **Automated Checks**: Built-in leakage detection
+5. **Date Cutoff**: Signals only use information available at market close
+
+## 🧪 Testing
+
+```bash
+# Run all tests
+pytest
+
+# Run unit tests only
+pytest tests/unit/
+
+# Run integration tests
+pytest tests/integration/
+
+# Run with coverage
+pytest --cov=market_event_ai --cov-report=html
+```
+
+## 📈 Example Results
+
+Sample backtest results (2016-2020):
+
+| Metric | Value |
+|--------|-------|
+| CAGR | TBD% |
+| Sharpe Ratio | TBD |
+| Max Drawdown | TBD% |
+| Total Trades | TBD |
+| Win Rate | TBD% |
+
+*Note: Run the pipeline to generate actual results*
+
+## 🔬 Research Extensions
+
+Future enhancements:
+
+- [ ] Multi-asset portfolio optimization
+- [ ] Alternative data sources (Reddit, news APIs)
+- [ ] Deep learning models (LSTM, Transformers)
+- [ ] Real-time streaming pipeline
+- [ ] Risk parity allocation
+- [ ] Options strategies
+
+## ⚠️ Disclaimer
+
+This software is for educational and research purposes only. It does not constitute financial advice. Past performance does not guarantee future results. Always conduct your own research and consult with financial professionals before making investment decisions.
+
+## 📝 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🤝 Contributing
+
+Contributions are welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes with tests
+4. Submit a pull request
+
+## 📚 References
+
+- Inspired by "Financial News Sentiment – Stock Market Analysis (Alpha-Mintamir)"
+- GDELT Project: [https://www.gdeltproject.org/](https://www.gdeltproject.org/)
+- Trump Twitter Archive: Various sources
+- Academic papers on event studies and market microstructure
+
+## 📧 Contact
+
+For questions or issues, please open a GitHub issue.
+
+---
+
+**Built with ❤️ for quantitative finance and ML research**

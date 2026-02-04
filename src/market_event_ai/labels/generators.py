@@ -156,3 +156,86 @@ def generate_labels(task: str = 'classification', threshold: float = None, horiz
     logger.info(f"Saved to {output_file}")
     
     return output_file
+
+
+# Wrapper functions for CLI
+def generate_return_labels(input_dir: Path, output_dir: Path, horizons: list):
+    """Generate return labels (CLI wrapper)."""
+    logger.info(f"Generating return labels for horizons: {horizons}")
+    
+    # Load features
+    features_file = input_dir / "features.parquet"
+    if not features_file.exists():
+        raise FileNotFoundError(f"Features file not found: {features_file}")
+    
+    df = pd.read_parquet(features_file)
+    
+    # Generate for each horizon
+    for horizon in horizons:
+        label_gen = LabelGenerator(threshold=0.0, horizon=horizon)
+        df_labeled = label_gen.create_regression_labels(df.copy())
+        
+        # Save
+        output_file = output_dir / f"return_labels_h{horizon}.parquet"
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        df_labeled.to_parquet(output_file, index=False)
+        logger.info(f"Saved return labels for horizon {horizon} to {output_file}")
+    
+    return output_dir
+
+
+def generate_direction_labels(input_dir: Path, output_dir: Path, horizons: list, threshold: float):
+    """Generate direction labels (CLI wrapper)."""
+    logger.info(f"Generating direction labels for horizons: {horizons}, threshold: {threshold}")
+    
+    # Load features
+    features_file = input_dir / "features.parquet"
+    if not features_file.exists():
+        raise FileNotFoundError(f"Features file not found: {features_file}")
+    
+    df = pd.read_parquet(features_file)
+    
+    # Generate for each horizon
+    for horizon in horizons:
+        label_gen = LabelGenerator(threshold=threshold, horizon=horizon)
+        df_labeled = label_gen.create_classification_labels(df.copy())
+        
+        # Save
+        output_file = output_dir / f"direction_labels_h{horizon}.parquet"
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        df_labeled.to_parquet(output_file, index=False)
+        logger.info(f"Saved direction labels for horizon {horizon} to {output_file}")
+    
+    # Also save as default for training
+    default_output = output_dir / "labeled_data_classification.parquet"
+    df_labeled.to_parquet(default_output, index=False)
+    
+    return output_dir
+
+
+def generate_volatility_labels(input_dir: Path, output_dir: Path, horizons: list):
+    """Generate volatility labels (CLI wrapper)."""
+    logger.info(f"Generating volatility labels for horizons: {horizons}")
+    
+    # Load features
+    features_file = input_dir / "features.parquet"
+    if not features_file.exists():
+        raise FileNotFoundError(f"Features file not found: {features_file}")
+    
+    df = pd.read_parquet(features_file)
+    df = df.sort_values(['ticker', 'date'])
+    
+    # Generate for each horizon
+    for horizon in horizons:
+        # Calculate forward volatility
+        df['target_volatility'] = df.groupby('ticker')['log_return'].transform(
+            lambda x: x.rolling(horizon, min_periods=1).std().shift(-horizon)
+        )
+        
+        # Save
+        output_file = output_dir / f"volatility_labels_h{horizon}.parquet"
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        df.to_parquet(output_file, index=False)
+        logger.info(f"Saved volatility labels for horizon {horizon} to {output_file}")
+    
+    return output_dir

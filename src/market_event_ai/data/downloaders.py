@@ -61,13 +61,24 @@ class GDELTDownloader:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.base_url = settings.data.gdelt_base_url
     
-    def download(self, start_date: str, end_date: str):
+    def download(self, start_date: Optional[str] = None, end_date: Optional[str] = None):
         """Download GDELT events for specified date range."""
         logger.info(f"Downloading GDELT data from {start_date} to {end_date}...")
         
-        # Parse dates
-        start = datetime.strptime(start_date, "%Y-%m-%d")
-        end = datetime.strptime(end_date, "%Y-%m-%d")
+        # Parse dates - handle both string and datetime objects
+        if isinstance(start_date, str):
+            start = datetime.strptime(start_date, "%Y-%m-%d")
+        elif isinstance(start_date, datetime):
+            start = start_date
+        else:
+            start = datetime(2016, 1, 1)
+        
+        if isinstance(end_date, str):
+            end = datetime.strptime(end_date, "%Y-%m-%d")
+        elif isinstance(end_date, datetime):
+            end = end_date
+        else:
+            end = datetime(2020, 12, 31)
         
         # For MVP, create sample data
         # In production, implement actual GDELT download
@@ -207,3 +218,36 @@ def download_all(start_date: str, end_date: str):
         'gdelt': gdelt_file,
         'financial': financial_file
     }
+
+
+# Wrapper functions for CLI
+def download_trump_tweets(output_dir: Path, start_date: str, end_date: str, force: bool = False):
+    """Download Trump tweets (CLI wrapper)."""
+    downloader = TrumpTweetsDownloader(output_dir)
+    return downloader.download(start_date, end_date)
+
+
+def download_gdelt_events(output_dir: Path, start_date: str, end_date: str, force: bool = False):
+    """Download GDELT events (CLI wrapper)."""
+    downloader = GDELTDownloader(output_dir)
+    return downloader.download(start_date, end_date)
+
+
+def download_financial_data(output_dir: Path, assets_config: dict, start_date: str, end_date: str, force: bool = False):
+    """Download financial data (CLI wrapper)."""
+    downloader = FinancialDataDownloader(output_dir)
+    
+    # Get enabled tickers from config
+    tickers = []
+    for etf in assets_config.get('etfs', []):
+        if etf.get('enabled', False):
+            tickers.append(etf['ticker'])
+    
+    for stock in assets_config.get('stocks', []):
+        if stock.get('enabled', False):
+            tickers.append(stock['ticker'])
+    
+    if not tickers:
+        raise ValueError("No enabled assets in configuration")
+    
+    return downloader.download(tickers, start_date, end_date)

@@ -150,3 +150,54 @@ def extract_features():
     
     logger.info("Feature extraction completed")
     return features_file
+
+
+# Wrapper functions for CLI
+def generate_text_features(input_dir: Path, output_dir: Path):
+    """Generate text features (CLI wrapper)."""
+    logger.info("Text features are generated as part of the main feature extraction")
+    # This is included in the main feature extraction
+    return None
+
+
+def generate_sentiment_features(input_dir: Path, output_dir: Path):
+    """Generate sentiment features (CLI wrapper)."""
+    logger.info("Sentiment features are already computed during preprocessing")
+    # Sentiment is computed during preprocessing
+    return None
+
+
+def generate_embeddings(input_dir: Path, output_dir: Path, model_name: str, batch_size: int):
+    """Generate text embeddings (CLI wrapper)."""
+    logger.info(f"Text embeddings using {model_name} (not implemented in MVP)")
+    # Optional for MVP - can be added later
+    return None
+
+
+def generate_technical_indicators(input_dir: Path, output_dir: Path):
+    """Generate technical indicators (CLI wrapper)."""
+    logger.info("Technical indicators are generated during financial preprocessing")
+    # Technical indicators are part of financial preprocessing
+    return None
+
+
+def combine_all_features(input_dir: Path, output_dir: Path):
+    """Combine all features (CLI wrapper)."""
+    logger.info("Starting combined feature extraction...")
+    
+    engineer = FeatureEngineer(output_dir)
+    
+    # Find preprocessed data
+    events_file = input_dir / "tweets_processed.csv"
+    if not events_file.exists():
+        events_file = input_dir / "gdelt_processed.csv"
+    
+    financial_file = input_dir / "financial_processed.parquet"
+    
+    if not events_file.exists() or not financial_file.exists():
+        raise FileNotFoundError(f"Missing preprocessed data files in {input_dir}")
+    
+    features_file = engineer.create_features(events_file, financial_file)
+    
+    logger.info("Feature combination completed")
+    return features_file
