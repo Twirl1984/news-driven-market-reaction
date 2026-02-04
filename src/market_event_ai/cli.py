@@ -663,8 +663,9 @@ def backtest(
     output_dir = output_dir or settings.paths.backtests
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    start_date = start_date or settings.trading.backtest_start_date
-    end_date = end_date or settings.trading.backtest_end_date
+    # Convert datetime objects to strings if provided, otherwise use settings
+    start_date = start_date.strftime("%Y-%m-%d") if start_date else settings.trading.backtest_start_date
+    end_date = end_date.strftime("%Y-%m-%d") if end_date else settings.trading.backtest_end_date
     initial_capital = initial_capital or settings.trading.initial_capital
 
     logger.info(f"Running backtest with model: {model_path}")
@@ -725,7 +726,7 @@ def backtest(
 @click.option(
     "--format",
     "-f",
-    "output_format",
+    "report_format",
     type=click.Choice(["html", "pdf", "markdown"]),
     default="html",
     help="Output format for report",
@@ -746,7 +747,7 @@ def report(
     ctx: click.Context,
     input_dir: Optional[Path],
     report_type: str,
-    output_format: str,
+    report_format: str,
     output: Optional[Path],
     include_plots: bool,
 ):
@@ -768,7 +769,7 @@ def report(
 
     if not output:
         timestamp = __import__("datetime").datetime.now().strftime("%Y%m%d_%H%M%S")
-        output = output_dir / f"report_{report_type}_{timestamp}.{output_format}"
+        output = output_dir / f"report_{report_type}_{timestamp}.{report_format}"
 
     logger.info(f"Generating {report_type} report from {input_dir}")
 
@@ -776,7 +777,7 @@ def report(
         generator = generators.ReportGenerator(
             input_dir=input_dir,
             output_path=output,
-            format=output_format,
+            format=report_format,
         )
 
         generator.generate(

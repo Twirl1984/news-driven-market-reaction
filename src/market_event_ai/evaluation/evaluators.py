@@ -6,21 +6,26 @@ This module handles evaluating trained models and computing performance metrics.
 
 import logging
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Union
 import joblib
 
 logger = logging.getLogger(__name__)
 
 
 class ModelEvaluator:
-    """Model evaluator for computing performance metrics."""
+    """
+    Model evaluator for computing performance metrics.
+    
+    This class works with scikit-learn compatible models (with predict/predict_proba methods)
+    including XGBoost, LightGBM, Random Forest, and Neural Networks.
+    """
 
     def __init__(self, model: Any):
         """
         Initialize evaluator with a trained model.
 
         Args:
-            model: Trained model object
+            model: Trained model object (scikit-learn compatible with predict method)
         """
         self.model = model
 
